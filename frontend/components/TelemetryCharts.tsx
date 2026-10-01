@@ -49,31 +49,28 @@ export const TelemetryCharts: React.FC<TelemetryChartsProps> = ({ data }) => {
           <div className="flex items-center bg-[#090c12] p-0.5 rounded border border-[#1b2332] text-[11px] font-mono">
             <button
               onClick={() => setChannel("VI")}
-              className={`px-2.5 py-1 rounded transition ${
-                channel === "VI"
+              className={`px-2.5 py-1 rounded transition ${channel === "VI"
                   ? "bg-[#162030] text-white font-medium"
                   : "text-[#6b7a94] hover:text-white"
-              }`}
+                }`}
             >
               CH1: Voltage / Current
             </button>
             <button
               onClick={() => setChannel("DELTA")}
-              className={`px-2.5 py-1 rounded transition ${
-                channel === "DELTA"
+              className={`px-2.5 py-1 rounded transition ${channel === "DELTA"
                   ? "bg-[#162030] text-white font-medium"
                   : "text-[#6b7a94] hover:text-white"
-              }`}
+                }`}
             >
               CH2: Cell Dispersion (ΔV)
             </button>
             <button
               onClick={() => setChannel("THERMAL")}
-              className={`px-2.5 py-1 rounded transition ${
-                channel === "THERMAL"
+              className={`px-2.5 py-1 rounded transition ${channel === "THERMAL"
                   ? "bg-[#162030] text-white font-medium"
                   : "text-[#6b7a94] hover:text-white"
-              }`}
+                }`}
             >
               CH3: Thermal & Impedance
             </button>
@@ -82,11 +79,10 @@ export const TelemetryCharts: React.FC<TelemetryChartsProps> = ({ data }) => {
           {/* Freeze / Live Buffer Button */}
           <button
             onClick={toggleFreeze}
-            className={`px-2.5 py-1 rounded border text-[11px] font-mono flex items-center gap-1.5 transition ${
-              frozen
+            className={`px-2.5 py-1 rounded border text-[11px] font-mono flex items-center gap-1.5 transition ${frozen
                 ? "bg-[#064e3b] text-[#34d399] border-[#059669]"
                 : "bg-[#141b26] hover:bg-[#1c2636] border-[#222e42] text-zinc-300"
-            }`}
+              }`}
           >
             {frozen ? (
               <>
@@ -273,9 +269,9 @@ export const TelemetryCharts: React.FC<TelemetryChartsProps> = ({ data }) => {
       {/* Scope Footer Readout */}
       <div className="mt-2.5 pt-2 border-t border-[#18202d] flex flex-wrap items-center justify-between text-[11px] font-mono text-[#6b7a94]">
         <div className="flex items-center gap-4">
-          <span>Timebase: <strong class="text-zinc-300">10.0s / div</strong></span>
-          <span>Sample Rate: <strong class="text-zinc-300">100 ms (A/D 16-bit)</strong></span>
-          <span>Trigger: <strong class="text-zinc-300">AUTO (Load ±5A)</strong></span>
+          <span>Timebase: <strong className="text-zinc-300">10.0s / div</strong></span>
+          <span>Sample Rate: <strong className="text-zinc-300">100 ms (A/D 16-bit)</strong></span>
+          <span>Trigger: <strong className="text-zinc-300">AUTO (Load ±5A)</strong></span>
         </div>
         <div className="flex items-center gap-4">
           <span>Status: <strong className={frozen ? "text-amber-400" : "text-[#10b981]"}>{frozen ? "BUFFER FROZEN" : "LIVE STREAMING"}</strong></span>
