@@ -1,0 +1,40 @@
+{
+  "metrics": {
+    "soh": {
+      "r2": 0.9934,
+      "rmse": 0.3791,
+      "mae": 0.2022
+    },
+    "rul": {
+      "r2": 0.9878,
+      "rmse": 24.54,
+      "mae": 13.12
+    }
+  },
+  "feature_importance": {
+    "internal_resistance_ohm": 0.6397048997422841,
+    "cycle_index": 0.1516905894536958,
+    "depth_of_discharge": 0.11762239616598924,
+    "ambient_temp_c": 0.04118455496233469,
+    "avg_discharge_temp_c": 0.03624450505412614,
+    "max_discharge_temp_c": 0.007108182155974229,
+    "charge_duration_min": 0.0021676912991366007,
+    "discharge_duration_min": 0.0017842269565870937,
+    "c_rate": 0.0013320363093966188,
+    "voltage_drop_v": 0.0011077054320045043,
+    "energy_efficiency_pct": 5.321246847106034e-05
+  },
+  "feature_columns": [
+    "cycle_index",
+    "ambient_temp_c",
+    "avg_discharge_temp_c",
+    "max_discharge_temp_c",
+    "voltage_drop_v",
+    "internal_resistance_ohm",
+    "c_rate",
+    "depth_of_discharge",
+    "charge_duration_min",
+    "discharge_duration_min",
+    "energy_efficiency_pct"
+  ]
+}

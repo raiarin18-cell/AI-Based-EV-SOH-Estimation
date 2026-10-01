@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OEM EV Battery Telemetry & SOH Diagnostic Terminal</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+          },
+          colors: {
+            telemetry: {
+              bg: '#080a0f',
+              panel: '#0d1117',
+              surface: '#131822',
+              border: '#1f2633',
+              borderLight: '#2b3547',
+              textMuted: '#6b7a94',
+              accentGreen: '#10b981',
+              accentBlue: '#0284c7',
+              accentCyan: '#06b6d4',
+              accentAmber: '#f59e0b',
+              accentRed: '#ef4444',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #080a0f;
+      color: #e2e8f0;
+      font-family: 'Inter', -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .panel {
+      background: #0d1117;
+      border: 1px solid #1c2433;
+    }
+    .panel:hover {
+      border-color: #263347;
+    }
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 9999px;
+    }
+    .tabular-numbers {
+      font-feature-settings: "tnum";
+      font-variant-numeric: tabular-nums;
+    }
+    /* Scope chart styling */
+    .chart-container {
+      position: relative;
+      background: #090c12;
+      border: 1px solid #18202d;
+    }
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #080a0f; }
+    ::-webkit-scrollbar-thumb { background: #1e2638; border-radius: 2px; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased select-none text-[13px]">
+
+  <!-- Top System Header Strip -->
+  <header class="border-b border-[#1c2433] bg-[#0b0e14] px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-50">
+    <div class="flex items-center space-x-3">
+      <!-- OEM Logo Badge -->
+      <div class="flex items-center gap-2 border-r border-[#1c2433] pr-3.5">
+        <div class="w-7 h-7 rounded bg-[#10b981]/10 border border-[#10b981]/30 flex items-center justify-center text-[#10b981] font-mono font-black text-sm">
+          ⚡
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-bold tracking-tight text-white text-[13px]">BMS DIAGNOSTIC TOOLBOX</span>
+            <span class="text-[10px] font-mono uppercase bg-[#182232] text-[#38bdf8] px-1.5 py-0.2 rounded border border-[#23354d]">v4.18.2-RTOS</span>
+          </div>
+          <div class="text-[11px] font-mono text-telemetry-textMuted flex items-center gap-2">
+            <span>VIN: <strong class="text-zinc-300 font-semibold">5YJSA1E28MF912048</strong></span>
+            <span>•</span>
+            <span>PACK: <strong class="text-zinc-300 font-semibold" id="packSerialDisplay">BP-400V-96S-0482</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Real-time Subsystem Status Flags -->
+      <div class="hidden xl:flex items-center gap-4 text-[11px] font-mono text-telemetry-textMuted">
+        <div class="flex items-center gap-1.5">
+          <span class="status-dot bg-[#10b981] animate-pulse"></span>
+          <span>HVIL: <strong class="text-[#10b981]">CLOSED (4.9V)</strong></span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="status-dot bg-[#10b981]"></span>
+          <span>CONTACTORS: <strong class="text-zinc-200">MAIN[+] / MAIN[-] CLOSED</strong></span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="status-dot bg-[#10b981]"></span>
+          <span>ISO: <strong class="text-[#10b981]">485 MΩ</strong></span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="status-dot bg-[#0ea5e9]"></span>
+          <span>CAN-FD: <strong class="text-zinc-200">50 Hz (<span id="canBusLoad">38.6%</span>)</strong></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Header Actions -->
+    <div class="flex items-center gap-2.5">
+      <div class="flex items-center gap-2 px-2.5 py-1 rounded bg-[#0e141f] border border-[#1b2536] text-[11px] font-mono">
+        <span class="w-2 h-2 rounded-full bg-[#10b981] animate-ping" style="animation-duration: 2s;"></span>
+        <span class="text-zinc-400">TELEMETRY:</span>
+        <span class="text-[#10b981] font-semibold" id="pollTimestamp">11:14:02 UTC</span>
+      </div>
+
+      <button onclick="downloadDiagnosticsJSON()" class="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#131924] hover:bg-[#1a2332] text-zinc-300 hover:text-white border border-[#212c3f] transition text-[11px] font-medium">
+        <i data-lucide="download" class="w-3.5 h-3.5"></i> Export UDS/JSON
+      </button>
+
+      <a href="/api/diagnostics/report-html" target="_blank" class="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#0f766e] hover:bg-[#115e59] text-white font-medium border border-[#14b8a6]/40 transition text-[11px] shadow-sm">
+        <i data-lucide="file-check" class="w-3.5 h-3.5"></i> Battery Passport Certificate
+      </a>
+    </div>
+  </header>
+
+  <!-- Secondary Hardware Topology Strip -->
+  <div class="bg-[#090c12] border-b border-[#18202d] px-4 py-1.5 flex flex-wrap items-center justify-between text-[11px] font-mono text-zinc-400">
+    <div class="flex items-center gap-5">
+      <div>Topology: <strong class="text-zinc-200">96S2P (192 Cylindrical Cells)</strong></div>
+      <div>Chemistry: <strong class="text-zinc-200">NMC-811 / Graphite-Si</strong></div>
+      <div>Pack Architecture: <strong class="text-zinc-200">400V Nominal · 75.0 kWh</strong></div>
+      <div>Coolant Circuit: <strong class="text-zinc-200">Glycol 50/50 · 14.2 L/min</strong></div>
+    </div>
+    <div class="flex items-center gap-4">
+      <div>ASIL-D Functional Safety: <strong class="text-[#10b981]">COMPLIANT</strong></div>
+      <div>Active DTCs: <strong class="text-[#10b981]" id="dtcCount">0 (NO FAULTS)</strong></div>
+    </div>
+  </div>
+
+  <!-- Real-time Emergency / Safety Alert Banner (Hidden when normal) -->
+  <div id="safetyBanner" class="hidden px-4 py-2 border-b border-rose-600/40 bg-rose-950/80 text-rose-200 flex items-center justify-between font-mono text-xs">
+    <div class="flex items-center gap-2.5">
+      <i data-lucide="shield-alert" class="w-4 h-4 text-rose-400 animate-pulse"></i>
+      <span class="font-bold" id="safetyAlertTitle">BMS CRITICAL THRESHOLD ALERT:</span>
+      <span id="safetyAlertDesc">Cell temperature exceeding optimal operating boundaries.</span>
+    </div>
+    <button onclick="dismissSafetyAlert()" class="px-2 py-0.5 rounded bg-black/40 hover:bg-black/60 text-[10px] uppercase font-bold text-zinc-300">Acknowledge</button>
+  </div>
+
+  <!-- Main Telemetry Workstation Grid -->
+  <main class="flex-1 p-4 max-w-[1720px] mx-auto w-full space-y-4">
+
+    <!-- Row 1: Primary Engineering Gauge Blocks -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+      <!-- 1. State of Health (SoH) -->
+      <div class="panel rounded p-3.5 flex flex-col justify-between">
+        <div class="flex justify-between items-start">
+          <span class="text-[10px] font-mono uppercase tracking-wider text-telemetry-textMuted">Pack State of Health</span>
+          <span id="sohGradeBadge" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#064e3b] text-[#34d399] border border-[#059669]">
+            WARRANTY OK
+          </span>
+        </div>
+        <div class="my-2">
+          <div class="flex items-baseline gap-1">
+            <span id="sohVal" class="text-2xl font-mono font-bold text-white tabular-numbers">96.8</span>
+            <span class="text-xs font-mono text-zinc-400">%</span>
+          </div>
+          <div class="text-[11px] font-mono text-telemetry-textMuted mt-0.5 flex justify-between">
+            <span>Capacity Fade:</span>
+            <span class="text-zinc-300 font-semibold">-3.2% (-6.4 Ah)</span>
+          </div>
+        </div>
+        <div class="pt-2 border-t border-[#18202d] text-[10px] font-mono text-zinc-400 flex justify-between">
+          <span>Usable Energy:</span>
+          <span class="text-zinc-200" id="usableEnergyDisplay">72.6 kWh</span>
+        </div>
+      </div>
+
+      <!-- 2. Remaining Useful Life (RUL) -->
+      <div class="panel rounded p-3.5 flex flex-col justify-between">
+        <div class="flex justify-between items-start">
+          <span class="text-[10px] font-mono uppercase tracking-wider text-telemetry-textMuted">Remaining Useful Life</span>
+          <span class="text-[10px] font-mono text-zinc-400">EOL: 80.0%</span>
+        </div>
+        <div class="my-2">
+          <div class="flex items-baseline gap-1">
+            <span id="rulCyclesVal" class="text-2xl font-mono font-bold text-white tabular-numbers">570</span>
+            <span class="text-xs font-mono text-[#0284c7]">CYCLES</span>
+          </div>
+          <div class="text-[11px] font-mono text-telemetry-textMuted mt-0.5 flex justify-between">
+            <span>Projected Distance:</span>
+            <span class="text-[#38bdf8] font-semibold" id="rulKmVal">205,200 km</span>
+          </div>
+        </div>
+        <div class="pt-2 border-t border-[#18202d] text-[10px] font-mono text-zinc-400 flex justify-between">
+          <span>Current Cycle Count:</span>
+          <span class="text-zinc-200" id="currentCycleDisplay">Cycle #142</span>
+        </div>
+      </div>
+
+      <!-- 3. Pack Electrics: Voltage & Current -->
+      <div class="panel rounded p-3.5 flex flex-col justify-between">
+        <div class="flex justify-between items-start">
+          <span class="text-[10px] font-mono uppercase tracking-wider text-telemetry-textMuted">Pack Electrics</span>
+          <span class="text-[10px] font-mono px-1 rounded bg-[#1e293b] text-zinc-300">HV DC BUS</span>
+        </div>
+        <div class="my-2">
+          <div class="flex items-baseline justify-between">
+            <div>
+              <span id="packVVal" class="text-xl font-mono font-bold text-white tabular-numbers">388.4</span>
+              <span class="text-[11px] font-mono text-zinc-400">V</span>
+            </div>
+            <div>
+              <span id="packIVal" class="text-xl font-mono font-bold text-[#38bdf8] tabular-numbers">+42.6</span>
+              <span class="text-[11px] font-mono text-zinc-400">A</span>
+            </div>
+          </div>
+          <div class="text-[11px] font-mono text-telemetry-textMuted mt-0.5 flex justify-between">
+            <span>Power Output:</span>
+            <span class="text-zinc-200 font-semibold" id="packPowerDisplay">16.55 kW</span>
+          </div>
+        </div>
+        <div class="pt-2 border-t border-[#18202d] text-[10px] font-mono text-zinc-400 flex justify-between">
+          <span>State of Charge:</span>
+          <span class="text-zinc-200 font-semibold" id="socVal">84.5%</span>
+        </div>
+      </div>
+
+      <!-- 4. Cell String Balance (Delta-V) -->
+      <div class="panel rounded p-3.5 flex flex-col justify-between">
+        <div class="flex justify-between items-start">
+          <span class="text-[10px] font-mono uppercase tracking-wider text-telemetry-textMuted">Cell String Balance</span>
+          <span class="text-[10px] font-mono px-1 rounded bg-[#064e3b] text-[#34d399] border border-[#059669]">
+            BALANCED
+          </span>
+        </div>
+        <div class="my-2">
+          <div class="flex items-baseline gap-1">
+            <span id="cellDeltaVal" class="text-2xl font-mono font-bold text-white tabular-numbers">15.0</span>
+            <span class="text-xs font-mono text-zinc-400">mV (ΔV)</span>
+          </div>
+          <div class="text-[11px] font-mono text-telemetry-textMuted mt-0.5 flex justify-between">
+            <span>Cell Min / Max:</span>
+            <span class="text-zinc-300 font-semibold" id="cellMinMaxDisplay">4.038 / 4.053 V</span>
+          </div>
+        </div>
+        <div class="pt-2 border-t border-[#18202d] text-[10px] font-mono text-zinc-400 flex justify-between">
+          <span>Balancing Circuit:</span>
+          <span class="text-zinc-200">PASSIVE (STANDBY)</span>
+        </div>
+      </div>
+
+      <!-- 5. Thermal Loop & Gradients -->
+      <div class="panel rounded p-3.5 flex flex-col justify-between">
+        <div class="flex justify-between items-start">
+          <span class="text-[10px] font-mono uppercase tracking-wider text-telemetry-textMuted">Thermal Management</span>
+          <span class="text-[10px] font-mono text-zinc-400">TARGET: 25°C</span>
+        </div>
+        <div class="my-2">
+          <div class="flex items-baseline justify-between">
+            <div>
+              <span id="cellAvgTempVal" class="text-xl font-mono font-bold text-white tabular-numbers">28.3</span>
+              <span class="text-[11px] font-mono text-zinc-400">°C Cell</span>
+            </div>
+            <div>
+              <span id="coolantTempVal" class="text-xl font-mono font-bold text-telemetry-accentAmber tabular-numbers">23.7</span>
+              <span class="text-[11px] font-mono text-zinc-400">°C Loop</span>
+            </div>
+          </div>
+          <div class="text-[11px] font-mono text-telemetry-textMuted mt-0.5 flex justify-between">
+            <span>Cell ΔT (Spread):</span>
+            <span class="text-zinc-300 font-semibold">1.7 °C (Max 29.2°C)</span>
+          </div>
+        </div>
+        <div class="pt-2 border-t border-[#18202d] text-[10px] font-mono text-zinc-400 flex justify-between">
+          <span>Coolant Pump:</span>
+          <span class="text-zinc-200">2,850 RPM (Active)</span>
+        </div>
+      </div>
+
+      <!-- 6. Internal Impedance (Ri) -->
+      <div class="panel rounded p-3.5 flex flex-col justify-between">
+        <div class="flex justify-between items-start">
+          <span class="text-[10px] font-mono uppercase tracking-wider text-telemetry-textMuted">DC Internal Resistance</span>
+          <span class="text-[10px] font-mono text-zinc-400">BOL: 45.0 mΩ</span>
+        </div>
+        <div class="my-2">
+          <div class="flex items-baseline gap-1">
+            <span id="riVal" class="text-2xl font-mono font-bold text-white tabular-numbers">48.2</span>
+            <span class="text-xs font-mono text-zinc-400">mΩ</span>
+          </div>
+          <div class="text-[11px] font-mono text-telemetry-textMuted mt-0.5 flex justify-between">
+            <span>Impedance Growth:</span>
+            <span class="text-telemetry-accentAmber font-semibold">+7.1% over fresh</span>
+          </div>
+        </div>
+        <div class="pt-2 border-t border-[#18202d] text-[10px] font-mono text-zinc-400 flex justify-between">
+          <span>SEI Layer Degradation:</span>
+          <span class="text-zinc-200">NOMINAL GROWTH</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 2: Oscilloscope Telemetry Traces (Tabbed / Synchronized Multi-Channel) -->
+    <div class="panel rounded p-4">
+      <div class="flex flex-wrap items-center justify-between pb-3 mb-3 border-b border-[#18202d] gap-2">
+        <div class="flex items-center gap-3">
+          <span class="text-[11px] font-mono font-bold text-zinc-200 uppercase tracking-wide flex items-center gap-1.5">
+            <i data-lucide="activity" class="w-3.5 h-3.5 text-[#38bdf8]"></i> Real-Time Telemetry Oscillogram
+          </span>
+          <span class="text-[10px] font-mono text-telemetry-textMuted border-l border-[#1f283a] pl-3">
+            Sub-Cycle Drive Profile (Urban Dynamometer + Acceleration Pulses + Regen)
+          </span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <!-- Trace Channel Selector Buttons -->
+          <div class="flex items-center bg-[#090c12] p-0.5 rounded border border-[#1b2332] text-[11px] font-mono">
+            <button id="btnTraceVI" onclick="switchTraceChannel('VI')" class="px-2.5 py-1 rounded bg-[#162030] text-white font-medium">CH1: Voltage / Current</button>
+            <button id="btnTraceDelta" onclick="switchTraceChannel('DELTA')" class="px-2.5 py-1 rounded text-telemetry-textMuted hover:text-white">CH2: Cell Dispersion (ΔV)</button>
+            <button id="btnTraceThermal" onclick="switchTraceChannel('THERMAL')" class="px-2.5 py-1 rounded text-telemetry-textMuted hover:text-white">CH3: Thermal & Impedance</button>
+          </div>
+
+          <!-- Buffer Controls -->
+          <button id="btnBufferPause" onclick="toggleBufferPause()" class="px-2.5 py-1 rounded bg-[#141b26] hover:bg-[#1c2636] border border-[#222e42] text-[11px] font-mono text-zinc-300">
+            ⏸ Freeze Buffer
+          </button>
+        </div>
+      </div>
+
+      <!-- Primary Oscillogram Canvas Container -->
+      <div class="chart-container rounded p-3 h-72 w-full">
+        <canvas id="scopeCanvas"></canvas>
+      </div>
+
+      <!-- Oscillogram Status Footer Readout -->
+      <div class="mt-2.5 pt-2 border-t border-[#18202d] flex flex-wrap items-center justify-between text-[11px] font-mono text-telemetry-textMuted">
+        <div class="flex items-center gap-4">
+          <span>Timebase: <strong class="text-zinc-300">10.0s / div</strong></span>
+          <span>Sample Rate: <strong class="text-zinc-300">100 ms (A/D 16-bit)</strong></span>
+          <span>Trigger: <strong class="text-zinc-300">AUTO (Current Threshold ±5A)</strong></span>
+        </div>
+        <div class="flex items-center gap-4">
+          <span>Peak Regen Current: <strong class="text-[#10b981]">-62.4 A (-24.2 kW)</strong></span>
+          <span>Peak Discharge Current: <strong class="text-telemetry-accentAmber">+138.2 A (53.6 kW)</strong></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 3: Predictive Degradation & Lifecycle Simulation Lab -->
+    <div class="panel rounded p-4">
+      <div class="flex flex-wrap items-center justify-between pb-3 mb-4 border-b border-[#18202d] gap-2">
+        <div>
+          <h2 class="text-xs font-mono font-bold uppercase tracking-wider text-zinc-200 flex items-center gap-1.5">
+            <i data-lucide="git-branch" class="w-4 h-4 text-[#06b6d4]"></i>
+            Electrochemical Lifecycle & Capacity Fade Prognostics Lab
+          </h2>
+          <p class="text-[11px] font-mono text-telemetry-textMuted mt-0.5">
+            Arrhenius Thermal Kinetics · SEI Diffusion ($t^{0.5}$) · C-Rate Mechanical Cracking · Wöhler DOD Fatigue Model
+          </p>
+        </div>
+
+        <!-- Simulation Presets -->
+        <div class="flex items-center gap-1.5 text-[11px] font-mono">
+          <span class="text-telemetry-textMuted mr-1">Presets:</span>
+          <button onclick="applySimPreset('commute')" class="px-2 py-0.5 rounded bg-[#141b26] hover:bg-[#1a2333] border border-[#202b3d] text-zinc-300">Commute (22°C·AC)</button>
+          <button onclick="applySimPreset('dcfc')" class="px-2 py-0.5 rounded bg-[#141b26] hover:bg-[#1a2333] border border-[#202b3d] text-zinc-300">Fast Turnaround (2.5C)</button>
+          <button onclick="applySimPreset('desert')" class="px-2 py-0.5 rounded bg-[#141b26] hover:bg-[#1a2333] border border-[#202b3d] text-zinc-300">Desert Hot (42°C)</button>
+          <button onclick="applySimPreset('nordic')" class="px-2 py-0.5 rounded bg-[#141b26] hover:bg-[#1a2333] border border-[#202b3d] text-zinc-300">Nordic Cold (-8°C)</button>
+          <button onclick="applySimPreset('optimal')" class="px-2 py-0.5 rounded bg-[#064e3b]/80 hover:bg-[#064e3b] border border-[#059669] text-[#34d399] font-medium">BMS Optimal (60% DOD)</button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <!-- Parameter Controllers (Left 4 cols) -->
+        <div class="lg:col-span-4 space-y-4 bg-[#090c12] p-3.5 rounded border border-[#18202d]">
+          <div>
+            <div class="flex justify-between items-center text-[11px] font-mono mb-1.5">
+              <span class="text-zinc-300">Ambient Operating Temperature</span>
+              <span id="sliderTempVal" class="text-[#06b6d4] font-bold">25 °C</span>
+            </div>
+            <input id="sliderTemp" type="range" min="-10" max="48" value="25" step="1"
+                   class="w-full h-1.5 bg-[#1b2332] rounded appearance-none cursor-pointer accent-[#06b6d4]"
+                   oninput="updateSimulation()" />
+            <div class="flex justify-between text-[10px] font-mono text-telemetry-textMuted mt-1">
+              <span>-10°C (Plating Risk)</span>
+              <span>25°C (Ref)</span>
+              <span>48°C (SEI Acceleration)</span>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex justify-between items-center text-[11px] font-mono mb-1.5">
+              <span class="text-zinc-300">DC Fast Charge Frequency (&gt; 2C)</span>
+              <span id="sliderFastChargeVal" class="text-[#06b6d4] font-bold">30 %</span>
+            </div>
+            <input id="sliderFastCharge" type="range" min="0" max="100" value="30" step="5"
+                   class="w-full h-1.5 bg-[#1b2332] rounded appearance-none cursor-pointer accent-[#06b6d4]"
+                   oninput="updateSimulation()" />
+            <div class="flex justify-between text-[10px] font-mono text-telemetry-textMuted mt-1">
+              <span>0% (AC Level 2)</span>
+              <span>50% (Mixed)</span>
+              <span>100% (High Stress)</span>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex justify-between items-center text-[11px] font-mono mb-1.5">
+              <span class="text-zinc-300">Daily Depth of Discharge (DOD)</span>
+              <span id="sliderDodVal" class="text-[#06b6d4] font-bold">80 %</span>
+            </div>
+            <input id="sliderDod" type="range" min="30" max="100" value="80" step="5"
+                   class="w-full h-1.5 bg-[#1b2332] rounded appearance-none cursor-pointer accent-[#06b6d4]"
+                   oninput="updateSimulation()" />
+            <div class="flex justify-between text-[10px] font-mono text-telemetry-textMuted mt-1">
+              <span>30% (Shallow Cycles)</span>
+              <span>80% (Typical)</span>
+              <span>100% (Full Deep)</span>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex justify-between items-center text-[11px] font-mono mb-1.5">
+              <span class="text-zinc-300">Daily Vehicle Mileage</span>
+              <span id="sliderKmVal" class="text-[#06b6d4] font-bold">55 km/day</span>
+            </div>
+            <input id="sliderKm" type="range" min="15" max="250" value="55" step="5"
+                   class="w-full h-1.5 bg-[#1b2332] rounded appearance-none cursor-pointer accent-[#06b6d4]"
+                   oninput="updateSimulation()" />
+          </div>
+
+          <!-- Computed Degradation Kinetics Box -->
+          <div class="pt-3 border-t border-[#18202d] text-[11px] font-mono space-y-1.5">
+            <div class="flex justify-between">
+              <span class="text-telemetry-textMuted">Composite Stress Multiplier:</span>
+              <span id="simStressVal" class="text-telemetry-accentAmber font-bold">1.00×</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-telemetry-textMuted">Projected EOL Cutoff (80% SoH):</span>
+              <span id="simEolCycleVal" class="text-white font-bold">Cycle 712</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-telemetry-textMuted">Estimated Operational Service:</span>
+              <span id="simYearsVal" class="text-[#10b981] font-bold">7.8 Years (~284,000 km)</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-telemetry-textMuted">Knee-Point Cliff Threshold:</span>
+              <span class="text-zinc-300">~Cycle 580 (LAM Transition)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Trajectory Chart & Degradation Breakdown (Right 8 cols) -->
+        <div class="lg:col-span-8 flex flex-col justify-between">
+          <div class="chart-container rounded p-3 h-64 w-full">
+            <canvas id="simCanvas"></canvas>
+          </div>
+
+          <!-- Engineering Recommendations & Degradation Breakdown -->
+          <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px] font-mono">
+            <div class="p-2.5 rounded bg-[#090c12] border border-[#18202d]">
+              <span class="text-[10px] uppercase text-telemetry-textMuted font-bold block mb-1">Electrochemical Assessment:</span>
+              <div id="simRecommendationText" class="text-zinc-300 leading-relaxed">
+                Operating within nominal Arrhenius activation window. DC fast charging at 30% frequency maintains acceptable cathode mechanical strain.
+              </div>
+            </div>
+            <div class="p-2.5 rounded bg-[#090c12] border border-[#18202d] space-y-1">
+              <span class="text-[10px] uppercase text-telemetry-textMuted font-bold block mb-0.5">Model Verification Benchmark:</span>
+              <div class="flex justify-between text-telemetry-textMuted">
+                <span>Model Pipeline:</span>
+                <span class="text-zinc-300">Gradient Boosting + RF Regressor</span>
+              </div>
+              <div class="flex justify-between text-telemetry-textMuted">
+                <span>Validation Accuracy:</span>
+                <span class="text-[#10b981] font-semibold">R² = 0.9934 | RMSE = 0.38%</span>
+              </div>
+              <div class="flex justify-between text-telemetry-textMuted">
+                <span>Primary Determinant:</span>
+                <span class="text-[#38bdf8] font-semibold">Internal Resistance Ri (63.97%)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 4: Diagnostic Trouble Codes (DTC) & Active Safety Interlocks Memory -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <!-- DTC Memory Table -->
+      <div class="panel rounded p-3.5">
+        <div class="flex items-center justify-between pb-2 mb-2 border-b border-[#18202d]">
+          <span class="text-[11px] font-mono font-bold uppercase tracking-wider text-zinc-200 flex items-center gap-1.5">
+            <i data-lucide="clipboard-check" class="w-3.5 h-3.5 text-[#10b981]"></i>
+            BMS Diagnostic Trouble Codes (DTC Memory)
+          </span>
+          <span class="text-[10px] font-mono text-[#10b981]">ISO 14229 UDS COMPLIANT</span>
+        </div>
+        <table class="w-full text-left font-mono text-[11px]">
+          <thead>
+            <tr class="text-telemetry-textMuted border-b border-[#151c28]">
+              <th class="py-1">DTC Code</th>
+              <th class="py-1">Fault Description</th>
+              <th class="py-1 text-right">Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[#151c28]">
+            <tr>
+              <td class="py-1.5 text-zinc-200">P0A80-00</td>
+              <td class="py-1.5 text-telemetry-textMuted">Hybrid / EV Battery Pack Degradation</td>
+              <td class="py-1.5 text-right text-[#10b981]">PASSED_AND_CLEARED</td>
+            </tr>
+            <tr>
+              <td class="py-1.5 text-zinc-200">P0B37-00</td>
+              <td class="py-1.5 text-telemetry-textMuted">High Voltage Service Disconnect Circuit</td>
+              <td class="py-1.5 text-right text-[#10b981]">CIRCUIT_NOMINAL</td>
+            </tr>
+            <tr>
+              <td class="py-1.5 text-zinc-200">P0AFA-00</td>
+              <td class="py-1.5 text-telemetry-textMuted">Hybrid Battery System Voltage Low</td>
+              <td class="py-1.5 text-right text-[#10b981]">NOT_PRESENT</td>
+            </tr>
+            <tr>
+              <td class="py-1.5 text-zinc-200">P0A1F-00</td>
+              <td class="py-1.5 text-telemetry-textMuted">Battery Energy Control Module Internal Check</td>
+              <td class="py-1.5 text-right text-[#10b981]">ROM_RAM_VERIFIED</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- High Voltage Interlocks & Pyrofuse Telemetry -->
+      <div class="panel rounded p-3.5">
+        <div class="flex items-center justify-between pb-2 mb-2 border-b border-[#18202d]">
+          <span class="text-[11px] font-mono font-bold uppercase tracking-wider text-zinc-200 flex items-center gap-1.5">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5 text-[#38bdf8]"></i>
+            Safety Interlock Matrix & Insulation Resistance
+          </span>
+          <span class="text-[10px] font-mono text-zinc-400">UN ECE R100 REV 3</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2 font-mono text-[11px] mt-1">
+          <div class="p-2 rounded bg-[#090c12] border border-[#18202d] flex justify-between">
+            <span class="text-telemetry-textMuted">HVIL Loop Continuity:</span>
+            <span class="text-[#10b981] font-semibold">CLOSED (4.92 V)</span>
+          </div>
+          <div class="p-2 rounded bg-[#090c12] border border-[#18202d] flex justify-between">
+            <span class="text-telemetry-textMuted">Pyrotechnic Safety Fuse:</span>
+            <span class="text-[#10b981] font-semibold">ARMED (2.1 Ω)</span>
+          </div>
+          <div class="p-2 rounded bg-[#090c12] border border-[#18202d] flex justify-between">
+            <span class="text-telemetry-textMuted">Chassis Isolation Pos (+):</span>
+            <span class="text-[#10b981] font-semibold">492 MΩ (&gt; 500 Ω/V)</span>
+          </div>
+          <div class="p-2 rounded bg-[#090c12] border border-[#18202d] flex justify-between">
+            <span class="text-telemetry-textMuted">Chassis Isolation Neg (-):</span>
+            <span class="text-[#10b981] font-semibold">485 MΩ (&gt; 500 Ω/V)</span>
+          </div>
+          <div class="p-2 rounded bg-[#090c12] border border-[#18202d] flex justify-between">
+            <span class="text-telemetry-textMuted">Pre-charge Contactor:</span>
+            <span class="text-zinc-300 font-semibold">OPEN (DISENGAGED)</span>
+          </div>
+          <div class="p-2 rounded bg-[#090c12] border border-[#18202d] flex justify-between">
+            <span class="text-telemetry-textMuted">Thermal Runaway Sensor:</span>
+            <span class="text-[#10b981] font-semibold">PRESSURE_NORMAL</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Workstation Industrial Status Bar -->
+  <footer class="border-t border-[#18202d] bg-[#0b0e14] px-4 py-2 flex flex-wrap items-center justify-between text-[11px] font-mono text-telemetry-textMuted">
+    <div class="flex items-center gap-4">
+      <span>DEVICE: <strong class="text-zinc-300">TI BQ79616-Q1 / NXP MC33771C BMS EVM</strong></span>
+      <span>•</span>
+      <span>CALIBRATION: <strong class="text-zinc-300">ISO 17025 CERTIFIED</strong></span>
+      <span>•</span>
+      <span>CRC-32: <strong class="text-zinc-400">0x8F4E290B</strong></span>
+    </div>
+    <div class="flex items-center gap-4">
+      <span>SERVER: <strong class="text-[#10b981]">ONLINE (127.0.0.1:8000)</strong></span>
+      <span>•</span>
+      <span>LATENCY: <strong class="text-zinc-300">3.2 ms</strong></span>
+    </div>
+  </footer>
+
+  <script>
+    // State management
+    let scopeChart = null;
+    let simChart = null;
+    let currentTraceChannel = 'VI';
+    let isBufferPaused = false;
+    let telemetryStreamBuffer = [];
+
+    // Initialize on DOM load
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      initScopeChart();
+      initSimChart();
+      fetchLatestTelemetry();
+      fetchTelemetryStream();
+      updateSimulation();
+
+      // Periodic CAN telemetry poll every 2.5 seconds
+      setInterval(() => {
+        if (!isBufferPaused) {
+          fetchLatestTelemetry();
+          fetchTelemetryStream();
+        }
+      }, 2500);
+
+      // Digital Clock ticking
+      setInterval(() => {
+        const now = new Date();
+        document.getElementById('pollTimestamp').innerText = now.toTimeString().split(' ')[0] + ' UTC';
+      }, 1000);
+    });
+
+    // Oscilloscope Multi-Channel Chart Configuration
+    function initScopeChart() {
+      const ctx = document.getElementById('scopeCanvas').getContext('2d');
+      scopeChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: 'Pack Terminal Voltage (V)',
+              data: [],
+              borderColor: '#38bdf8',
+              backgroundColor: 'rgba(56, 189, 248, 0.08)',
+              borderWidth: 1.8,
+              yAxisID: 'yLeft',
+              tension: 0.2,
+              pointRadius: 0,
+            },
+            {
+              label: 'Pack Load Current (A)',
+              data: [],
+              borderColor: '#10b981',
+              backgroundColor: 'rgba(16, 185, 129, 0.08)',
+              borderWidth: 1.8,
+              yAxisID: 'yRight',
+              tension: 0.2,
+              pointRadius: 0,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            x: {
+              grid: { color: '#141c28' },
+              ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
+            },
+            yLeft: {
+              type: 'linear',
+              position: 'left',
+              grid: { color: '#141c28' },
+              ticks: { color: '#38bdf8', font: { family: 'JetBrains Mono', size: 10 } }
+            },
+            yRight: {
+              type: 'linear',
+              position: 'right',
+              grid: { drawOnChartArea: false },
+              ticks: { color: '#10b981', font: { family: 'JetBrains Mono', size: 10 } }
+            }
+          },
+          plugins: {
+            legend: {
+              labels: { color: '#cbd5e1', font: { family: 'JetBrains Mono', size: 11 }, boxWidth: 12 }
+            },
+            tooltip: {
+              backgroundColor: '#0b0f17',
+              borderColor: '#263447',
+              borderWidth: 1,
+              titleFont: { family: 'JetBrains Mono', size: 11 },
+              bodyFont: { family: 'JetBrains Mono', size: 11 }
+            }
+          }
+        }
+      });
+    }
+
+    // Degradation Lifespan Forecast Chart
+    function initSimChart() {
+      const ctx = document.getElementById('simCanvas').getContext('2d');
+      simChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: 'Projected Driving Profile (Mean)',
+              data: [],
+              borderColor: '#06b6d4',
+              borderWidth: 2,
+              tension: 0.25,
+              pointRadius: 0,
+            },
+            {
+              label: '95% Confidence Upper Band',
+              data: [],
+              borderColor: 'rgba(6, 182, 212, 0.3)',
+              borderWidth: 1,
+              borderDash: [3, 3],
+              pointRadius: 0,
+              fill: '+1',
+              backgroundColor: 'rgba(6, 182, 212, 0.08)'
+            },
+            {
+              label: '95% Confidence Lower Band',
+              data: [],
+              borderColor: 'rgba(6, 182, 212, 0.3)',
+              borderWidth: 1,
+              borderDash: [3, 3],
+              pointRadius: 0,
+              fill: false,
+            },
+            {
+              label: 'BMS Optimal Baseline (60% DOD · 22°C)',
+              data: [],
+              borderColor: '#10b981',
+              borderWidth: 1.5,
+              borderDash: [5, 5],
+              tension: 0.25,
+              pointRadius: 0,
+            },
+            {
+              label: 'Warranty EOL Limit (80.0% SoH)',
+              data: [],
+              borderColor: '#ef4444',
+              borderWidth: 1.2,
+              borderDash: [2, 2],
+              pointRadius: 0,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              grid: { color: '#141c28' },
+              ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } },
+              title: { display: true, text: 'Lifecycle Equivalent Full Cycles', color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
+            },
+            y: {
+              min: 65,
+              max: 100,
+              grid: { color: '#141c28' },
+              ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 10 } },
+              title: { display: true, text: 'State of Health (SoH %)', color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
+            }
+          },
+          plugins: {
+            legend: {
+              labels: { color: '#cbd5e1', font: { family: 'JetBrains Mono', size: 10 }, boxWidth: 10 }
+            },
+            tooltip: {
+              backgroundColor: '#0b0f17',
+              borderColor: '#263447',
+              borderWidth: 1,
+              titleFont: { family: 'JetBrains Mono', size: 11 },
+              bodyFont: { family: 'JetBrains Mono', size: 11 }
+            }
+          }
+        }
+      });
+    }
+
+    // Switch Oscillogram Channels
+    function switchTraceChannel(channel) {
+      currentTraceChannel = channel;
+      document.getElementById('btnTraceVI').className = channel === 'VI' ? 'px-2.5 py-1 rounded bg-[#162030] text-white font-medium' : 'px-2.5 py-1 rounded text-telemetry-textMuted hover:text-white';
+      document.getElementById('btnTraceDelta').className = channel === 'DELTA' ? 'px-2.5 py-1 rounded bg-[#162030] text-white font-medium' : 'px-2.5 py-1 rounded text-telemetry-textMuted hover:text-white';
+      document.getElementById('btnTraceThermal').className = channel === 'THERMAL' ? 'px-2.5 py-1 rounded bg-[#162030] text-white font-medium' : 'px-2.5 py-1 rounded text-telemetry-textMuted hover:text-white';
+
+      renderScopeChannel();
+    }
+
+    function renderScopeChannel() {
+      if (!scopeChart || !telemetryStreamBuffer.length) return;
+      const data = telemetryStreamBuffer;
+      const labels = data.map(d => `${d.timestamp_sec}s`);
+
+      if (currentTraceChannel === 'VI') {
+        scopeChart.data.labels = labels;
+        scopeChart.data.datasets = [
+          {
+            label: 'Pack Terminal Voltage (V)',
+            data: data.map(d => d.voltage_v),
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56, 189, 248, 0.08)',
+            borderWidth: 1.8,
+            yAxisID: 'yLeft',
+            tension: 0.2,
+            pointRadius: 0,
+          },
+          {
+            label: 'Pack Load Current (A)',
+            data: data.map(d => d.current_a),
+            borderColor: '#10b981',
+            backgroundColor: 'rgba(16, 185, 129, 0.08)',
+            borderWidth: 1.8,
+            yAxisID: 'yRight',
+            tension: 0.2,
+            pointRadius: 0,
+          }
+        ];
+        scopeChart.options.scales.yLeft.title = { display: true, text: 'Voltage (V)', color: '#38bdf8', font: { family: 'JetBrains Mono', size: 10 } };
+        scopeChart.options.scales.yRight.title = { display: true, text: 'Current (A)', color: '#10b981', font: { family: 'JetBrains Mono', size: 10 } };
+      } else if (currentTraceChannel === 'DELTA') {
+        scopeChart.data.labels = labels;
+        scopeChart.data.datasets = [
+          {
+            label: 'Cell Max Voltage (V)',
+            data: data.map(d => d.cell_max_v || (d.voltage_v / 96.0 + 0.007)),
+            borderColor: '#f59e0b',
+            borderWidth: 1.6,
+            yAxisID: 'yLeft',
+            tension: 0.2,
+            pointRadius: 0,
+          },
+          {
+            label: 'Cell Min Voltage (V)',
+            data: data.map(d => d.cell_min_v || (d.voltage_v / 96.0 - 0.008)),
+            borderColor: '#0284c7',
+            borderWidth: 1.6,
+            yAxisID: 'yLeft',
+            tension: 0.2,
+            pointRadius: 0,
+          },
+          {
+            label: 'Cell Dispersion ΔV (mV)',
+            data: data.map(d => d.cell_delta_mv || 15.0),
+            borderColor: '#ef4444',
+            borderWidth: 1.6,
+            borderDash: [3, 3],
+            yAxisID: 'yRight',
+            tension: 0.2,
+            pointRadius: 0,
+          }
+        ];
+        scopeChart.options.scales.yLeft.title = { display: true, text: 'Cell Volts (V)', color: '#f59e0b', font: { family: 'JetBrains Mono', size: 10 } };
+        scopeChart.options.scales.yRight.title = { display: true, text: 'Spread ΔV (mV)', color: '#ef4444', font: { family: 'JetBrains Mono', size: 10 } };
+      } else if (currentTraceChannel === 'THERMAL') {
+        scopeChart.data.labels = labels;
+        scopeChart.data.datasets = [
+          {
+            label: 'Cell Core Temperature (°C)',
+            data: data.map(d => d.temperature_c),
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245, 158, 11, 0.08)',
+            borderWidth: 1.8,
+            yAxisID: 'yLeft',
+            tension: 0.2,
+            pointRadius: 0,
+          },
+          {
+            label: 'Internal Resistance Ri (mΩ)',
+            data: data.map(d => d.internal_resistance_mohm),
+            borderColor: '#a855f7',
+            borderWidth: 1.8,
+            yAxisID: 'yRight',
+            tension: 0.2,
+            pointRadius: 0,
+          }
+        ];
+        scopeChart.options.scales.yLeft.title = { display: true, text: 'Temperature (°C)', color: '#f59e0b', font: { family: 'JetBrains Mono', size: 10 } };
+        scopeChart.options.scales.yRight.title = { display: true, text: 'Resistance (mΩ)', color: '#a855f7', font: { family: 'JetBrains Mono', size: 10 } };
+      }
+
+      scopeChart.update('none');
+    }
+
+    function toggleBufferPause() {
+      isBufferPaused = !isBufferPaused;
+      const btn = document.getElementById('btnBufferPause');
+      if (isBufferPaused) {
+        btn.innerText = '▶ Resume Buffer';
+        btn.className = 'px-2.5 py-1 rounded bg-[#064e3b] text-[#34d399] border border-[#059669] text-[11px] font-mono';
+      } else {
+        btn.innerText = '⏸ Freeze Buffer';
+        btn.className = 'px-2.5 py-1 rounded bg-[#141b26] hover:bg-[#1c2636] border border-[#222e42] text-[11px] font-mono text-zinc-300';
+      }
+    }
+
+    // Fetch Latest Telemetry Packet
+    async function fetchLatestTelemetry() {
+      try {
+        const res = await fetch('/api/telemetry/latest');
+        if (!res.ok) return;
+        const d = await res.json();
+
+        document.getElementById('sohVal').innerText = d.soh_percent.toFixed(1);
+        document.getElementById('rulCyclesVal').innerText = d.rul_cycles;
+        document.getElementById('rulKmVal').innerText = d.rul_km.toLocaleString() + ' km';
+        document.getElementById('packVVal').innerText = d.voltage_v.toFixed(1);
+        document.getElementById('packIVal').innerText = (d.current_a >= 0 ? '+' : '') + d.current_a.toFixed(1);
+        document.getElementById('socVal').innerText = d.soc_percent.toFixed(1) + '%';
+        document.getElementById('riVal').innerText = d.internal_resistance_mohm.toFixed(1);
+        document.getElementById('cellAvgTempVal').innerText = d.temperature_c.toFixed(1);
+        document.getElementById('coolantTempVal').innerText = (d.coolant_inlet_temp_c || 22.8).toFixed(1);
+        document.getElementById('canBusLoad').innerText = (d.can_bus_load_pct || 38.6).toFixed(1) + '%';
+        document.getElementById('packSerialDisplay').innerText = d.pack_serial || 'BP-400V-96S-0482';
+
+        if (d.cell_delta_mv) {
+          document.getElementById('cellDeltaVal').innerText = d.cell_delta_mv.toFixed(1);
+          document.getElementById('cellMinMaxDisplay').innerText = `${d.cell_min_v.toFixed(3)} / ${d.cell_max_v.toFixed(3)} V`;
+        }
+
+        if (d.pack_power_kw) {
+          document.getElementById('packPowerDisplay').innerText = `${d.pack_power_kw.toFixed(2)} kW`;
+        }
+
+        // Safety threshold check
+        if (d.temperature_c >= 55.0) {
+          showSafetyAlert('CRITICAL THERMAL RUNAWAY HAZARD', `Cell core reached ${d.temperature_c.toFixed(1)}°C. BMS automatic coolant valve bypass engaged.`);
+        } else if (d.temperature_c >= 45.0) {
+          showSafetyAlert('HIGH TEMPERATURE STRESS WARNING', `Pack temperature ${d.temperature_c.toFixed(1)}°C exceeds optimal threshold. Derating peak discharge current.`);
+        } else {
+          hideSafetyAlert();
+        }
+      } catch (err) {
+        console.error('Telemetry fetch failure:', err);
+      }
+    }
+
+    // Fetch High-Frequency Telemetry Stream
+    async function fetchTelemetryStream() {
+      try {
+        const ambTemp = document.getElementById('sliderTemp').value;
+        const res = await fetch(`/api/telemetry/stream?points=60&ambient_temp=${ambTemp}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        telemetryStreamBuffer = json.data;
+        renderScopeChannel();
+      } catch (err) {
+        console.error('Stream fetch failure:', err);
+      }
+    }
+
+    // Simulation updates
+    async function updateSimulation() {
+      const temp = parseFloat(document.getElementById('sliderTemp').value);
+      const fastCharge = parseFloat(document.getElementById('sliderFastCharge').value);
+      const dod = parseFloat(document.getElementById('sliderDod').value);
+      const dailyKm = parseFloat(document.getElementById('sliderKm').value);
+
+      document.getElementById('sliderTempVal').innerText = `${temp} °C`;
+      document.getElementById('sliderFastChargeVal').innerText = `${fastCharge} %`;
+      document.getElementById('sliderDodVal').innerText = `${dod} %`;
+      document.getElementById('sliderKmVal').innerText = `${dailyKm} km/day`;
+
+      try {
+        const res = await fetch('/api/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            current_cycle: 142,
+            current_soh: 96.8,
+            ambient_temp_c: temp,
+            fast_charge_pct: fastCharge,
+            dod_pct: dod,
+            daily_km: dailyKm,
+            forecast_horizon_cycles: 650,
+          })
+        });
+
+        if (!res.ok) return;
+        const data = await res.json();
+
+        document.getElementById('simStressVal').innerText = `${data.stress_multiplier}×`;
+        document.getElementById('simEolCycleVal').innerText = `Cycle ${data.projected_eol_cycle}`;
+        document.getElementById('simYearsVal').innerText = `${data.estimated_years_to_eol} Years (~${data.estimated_km_to_eol.toLocaleString()} km)`;
+
+        if (data.recommendations && data.recommendations.length > 0) {
+          document.getElementById('simRecommendationText').innerText = data.recommendations[0];
+        }
+
+        const traj = data.forecast_trajectory;
+        const labels = traj.map(t => t.cycle);
+        const meanSoH = traj.map(t => t.user_soh);
+        const optSoH = traj.map(t => t.optimal_soh);
+        const upperBand = traj.map(t => Math.min(100.0, +(t.user_soh + 0.8).toFixed(2)));
+        const lowerBand = traj.map(t => Math.max(50.0, +(t.user_soh - 0.8).toFixed(2)));
+        const eolLine = traj.map(() => 80.0);
+
+        if (simChart) {
+          simChart.data.labels = labels;
+          simChart.data.datasets[0].data = meanSoH;
+          simChart.data.datasets[1].data = upperBand;
+          simChart.data.datasets[2].data = lowerBand;
+          simChart.data.datasets[3].data = optSoH;
+          simChart.data.datasets[4].data = eolLine;
+          simChart.update('none');
+        }
+      } catch (err) {
+        console.error('Simulation failure:', err);
+      }
+    }
+
+    // Apply simulation presets
+    function applySimPreset(preset) {
+      if (preset === 'commute') {
+        document.getElementById('sliderTemp').value = 22;
+        document.getElementById('sliderFastCharge').value = 15;
+        document.getElementById('sliderDod').value = 75;
+        document.getElementById('sliderKm').value = 50;
+      } else if (preset === 'dcfc') {
+        document.getElementById('sliderTemp').value = 28;
+        document.getElementById('sliderFastCharge').value = 85;
+        document.getElementById('sliderDod').value = 90;
+        document.getElementById('sliderKm').value = 120;
+      } else if (preset === 'desert') {
+        document.getElementById('sliderTemp').value = 42;
+        document.getElementById('sliderFastCharge').value = 40;
+        document.getElementById('sliderDod').value = 85;
+        document.getElementById('sliderKm').value = 70;
+      } else if (preset === 'nordic') {
+        document.getElementById('sliderTemp').value = -8;
+        document.getElementById('sliderFastCharge').value = 20;
+        document.getElementById('sliderDod').value = 80;
+        document.getElementById('sliderKm').value = 45;
+      } else if (preset === 'optimal') {
+        document.getElementById('sliderTemp').value = 22;
+        document.getElementById('sliderFastCharge').value = 5;
+        document.getElementById('sliderDod').value = 60;
+        document.getElementById('sliderKm').value = 40;
+      }
+      updateSimulation();
+    }
+
+    function showSafetyAlert(title, desc) {
+      document.getElementById('safetyAlertTitle').innerText = title + ':';
+      document.getElementById('safetyAlertDesc').innerText = desc;
+      document.getElementById('safetyBanner').classList.remove('hidden');
+    }
+
+    function hideSafetyAlert() {
+      document.getElementById('safetyBanner').classList.add('hidden');
+    }
+
+    function dismissSafetyAlert() {
+      hideSafetyAlert();
+    }
+
+    async function downloadDiagnosticsJSON() {
+      const res = await fetch('/api/diagnostics/summary');
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `uds_bms_diagnostics_${data.report_id}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  </script>
+</body>
+</html>
