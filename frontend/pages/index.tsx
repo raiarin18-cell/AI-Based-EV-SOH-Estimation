@@ -44,7 +44,7 @@ export default function Dashboard() {
           if (!telemetry) {
             setTelemetry({
               battery_id: "EV-PACK-NX75-402",
-              chemistry: "Lithium Nickel Manganese Cobalt Oxide (NMC-811)",
+              chemistry: "Lithium Nickel Manganese Cobalt",
               nominal_capacity_ah: 200.0,
               nominal_voltage_v: 375.0,
               current_cycle: 142,
@@ -58,7 +58,7 @@ export default function Dashboard() {
               rul_cycles: 570,
               rul_km: 205200.0,
               last_updated: new Date().toISOString(),
-            });
+            } as any);
             setLoading(false);
           }
         }
@@ -114,11 +114,10 @@ export default function Dashboard() {
           <div className="flex items-center space-x-3 mt-3 sm:mt-0">
             {/* Live Connection Pill */}
             <div
-              className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg border font-medium ${
-                isOnline
+              className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg border font-medium ${isOnline
                   ? "bg-emerald-950/60 border-emerald-800/80 text-emerald-300"
                   : "bg-amber-950/60 border-amber-800/80 text-amber-300"
-              }`}
+                }`}
             >
               {isOnline ? (
                 <>
