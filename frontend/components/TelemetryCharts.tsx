@@ -50,8 +50,8 @@ export const TelemetryCharts: React.FC<TelemetryChartsProps> = ({ data }) => {
             <button
               onClick={() => setChannel("VI")}
               className={`px-2.5 py-1 rounded transition ${channel === "VI"
-                  ? "bg-[#162030] text-white font-medium"
-                  : "text-[#6b7a94] hover:text-white"
+                ? "bg-[#162030] text-white font-medium"
+                : "text-[#6b7a94] hover:text-white"
                 }`}
             >
               CH1: Voltage / Current
@@ -59,8 +59,8 @@ export const TelemetryCharts: React.FC<TelemetryChartsProps> = ({ data }) => {
             <button
               onClick={() => setChannel("DELTA")}
               className={`px-2.5 py-1 rounded transition ${channel === "DELTA"
-                  ? "bg-[#162030] text-white font-medium"
-                  : "text-[#6b7a94] hover:text-white"
+                ? "bg-[#162030] text-white font-medium"
+                : "text-[#6b7a94] hover:text-white"
                 }`}
             >
               CH2: Cell Dispersion (ΔV)
@@ -68,8 +68,8 @@ export const TelemetryCharts: React.FC<TelemetryChartsProps> = ({ data }) => {
             <button
               onClick={() => setChannel("THERMAL")}
               className={`px-2.5 py-1 rounded transition ${channel === "THERMAL"
-                  ? "bg-[#162030] text-white font-medium"
-                  : "text-[#6b7a94] hover:text-white"
+                ? "bg-[#162030] text-white font-medium"
+                : "text-[#6b7a94] hover:text-white"
                 }`}
             >
               CH3: Thermal & Impedance
@@ -80,8 +80,8 @@ export const TelemetryCharts: React.FC<TelemetryChartsProps> = ({ data }) => {
           <button
             onClick={toggleFreeze}
             className={`px-2.5 py-1 rounded border text-[11px] font-mono flex items-center gap-1.5 transition ${frozen
-                ? "bg-[#064e3b] text-[#34d399] border-[#059669]"
-                : "bg-[#141b26] hover:bg-[#1c2636] border-[#222e42] text-zinc-300"
+              ? "bg-[#064e3b] text-[#34d399] border-[#059669]"
+              : "bg-[#141b26] hover:bg-[#1c2636] border-[#222e42] text-zinc-300"
               }`}
           >
             {frozen ? (
@@ -274,7 +274,7 @@ export const TelemetryCharts: React.FC<TelemetryChartsProps> = ({ data }) => {
           <span>Trigger: <strong className="text-zinc-300">AUTO (Load ±5A)</strong></span>
         </div>
         <div className="flex items-center gap-4">
-          <span>Status: <strong className={frozen ? "text-amber-400" : "text-[#10b981]"}>{frozen ? "BUFFER FROZEN" : "LIVE STREAMING"}</strong></span>
+          <span>Status: <strong className={frozen ? "text-amber-500" : "text-emerald-500"}></strong></span>
         </div>
       </div>
     </div>
